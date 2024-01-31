@@ -3,6 +3,7 @@ const app = express()
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 require('dotenv').config()
+const stripe = require("stripe")(process.env.PAYMENT_SECRET_KEY);
 const port = process.env.PORT || 5000
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 
@@ -46,6 +47,7 @@ async function run() {
         const userCollection = client.db("swiftBite").collection("user");
         const menuCollection = client.db("swiftBite").collection("menu");
         const orderCollection = client.db("swiftBite").collection("order");
+        const paymentCollection = client.db("swiftBite").collection("payment");
 
 
         app.post('/jwt', (req, res) => {
@@ -169,6 +171,50 @@ async function run() {
             const query = { _id: new ObjectId(id) };
             const result = await orderCollection.deleteOne(query);
             res.send(result);
+        })
+
+        // {---------Payment api---------}
+        app.post('/create-payment-intent', verifyJWT, async (req, res) => {
+            const { price } = req.body;
+            const amount = price * 100;
+
+            const paymentIntent = await stripe.paymentIntents.create({
+                amount: amount,
+                currency: "usd",
+                payment_method_types: [
+                    "card"
+                ],
+            });
+
+            res.send({
+                clientSecret: paymentIntent.client_secret,
+            });
+        })
+
+        app.post('/payment', verifyJWT, async (req, res) => {
+            const payment = req.body;
+            const insertResult = await paymentCollection.insertOne(payment);
+
+            const query = { _id: { $in: payment.orderItems.map(id => new ObjectId(id)) } }
+            const deleteResult = await orderCollection.deleteMany(query);
+
+
+            res.send({ insertResult, deleteResult });
+        })
+
+        app.get('/admin-statistics', verifyJWT, verifyAdmin, async (req, res) => {
+            const user = await userCollection.estimatedDocumentCount();
+            const menuItems = await menuCollection.estimatedDocumentCount();
+            const orders = await orderCollection.estimatedDocumentCount();
+            const payments = await paymentCollection.find().toArray();
+            const revenue = payments.reduce((sum, item) => sum + item.price, 0)
+
+            res.send({
+                user,
+                menuItems,
+                orders,
+                revenue
+            });
         })
 
         // Send a ping to confirm a successful connection
