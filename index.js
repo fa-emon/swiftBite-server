@@ -123,9 +123,34 @@ async function run() {
             res.send(result);
         })
 
+        app.get('/menu/category/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) };
+            const result = await menuCollection.findOne(query);
+            res.send(result);
+        })
+
         app.post('/menu', verifyJWT, verifyAdmin, async (req, res) => {
             const item = req.body;
             const result = await menuCollection.insertOne(item);
+            res.send(result);
+        })
+
+        app.patch('/menu/category/:id', async(req, res) => {
+            const item = req.body;
+            const id = req.params.id;
+            const filter = {_id: new ObjectId(id)}
+            const updateDoc = {
+                $set: {
+                    name: item.name,
+                    image: item.image,
+                    price: item.price,
+                    category: item.category,
+                    short_description: item.short_description
+                }
+            }
+
+            const result = await menuCollection.updateOne(filter, updateDoc);
             res.send(result);
         })
 
@@ -133,13 +158,6 @@ async function run() {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) }
             const result = await menuCollection.deleteOne(query);
-            res.send(result);
-        })
-
-        app.get('/menu/category/:id', async (req, res) => {
-            const id = req.params.id;
-            const query = { _id: new ObjectId(id) };
-            const result = await menuCollection.findOne(query);
             res.send(result);
         })
 
