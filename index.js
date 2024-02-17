@@ -136,10 +136,10 @@ async function run() {
             res.send(result);
         })
 
-        app.patch('/menu/category/:id', async(req, res) => {
+        app.patch('/menu/category/:id', async (req, res) => {
             const item = req.body;
             const id = req.params.id;
-            const filter = {_id: new ObjectId(id)}
+            const filter = { _id: new ObjectId(id) }
             const updateDoc = {
                 $set: {
                     name: item.name,
@@ -192,6 +192,7 @@ async function run() {
         })
 
         // {---------Payment api---------}
+        //payment Intent
         app.post('/create-payment-intent', verifyJWT, async (req, res) => {
             const { price } = req.body;
             const amount = price * 100;
@@ -207,6 +208,17 @@ async function run() {
             res.send({
                 clientSecret: paymentIntent.client_secret,
             });
+        })
+
+        app.get('/payment/:email', verifyJWT, async (req, res) => {
+            const email = req.params.email;
+            if(req.decoded.email != email){
+                return res.status(403).send({message: 'forbidden access'});
+            }
+
+            const query = {email: email}
+            const result = await paymentCollection.find(query).toArray();
+            res.send(result);
         })
 
         app.post('/payment', verifyJWT, async (req, res) => {
