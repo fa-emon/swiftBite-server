@@ -48,7 +48,8 @@ async function run() {
         const menuCollection = client.db("swiftBite").collection("menu");
         const orderCollection = client.db("swiftBite").collection("order");
         const paymentCollection = client.db("swiftBite").collection("payment");
-
+        //TODO: create bookingCollection for delete the item..
+        
 
         app.post('/jwt', (req, res) => {
             const user = req.body;
@@ -84,6 +85,43 @@ async function run() {
             const result = await userCollection.insertOne(user);
             res.send(result);
         })
+
+        app.get('/user-statistics/:email', verifyJWT, async (req, res) => {
+            const email = req.params.email;
+
+            if (req.decoded.email !== email) {
+                return res.status(401).send({ message: 'unauthorized access!' });
+            }
+
+            try {
+                const payments = await paymentCollection.find({ email: email }).toArray();
+
+                // Calculate item counts using Array.reduce and forEach
+                const itemCounts = payments.reduce((acc, payment) => {
+                    payment.itemsName.forEach(itemName => acc[itemName] = (acc[itemName] || 0) + 1);
+                    return acc;
+                }, {});
+
+                // Calculate total revenue
+                const totalRevenue = payments.reduce((sum, item) => sum + item.price, 0).toFixed(2);
+
+                // Calculate total item count
+                const totalItemCount = Object.values(itemCounts).reduce((sum, count) => sum + count, 0);
+
+                // Count menu items
+                const menuItemsCount = await menuCollection.countDocuments();
+
+                res.send({
+                    totalRevenue,
+                    totalItemCount,
+                    menuItemsCount
+                });
+            } catch (error) {
+                console.error(error);
+                res.status(500).send({ message: 'Internal Server Error' });
+            }
+        });
+
 
         // {---------admin api---------}
         app.get('/user/admin/:email', verifyJWT, async (req, res) => {
@@ -178,6 +216,33 @@ async function run() {
             res.send(result);
         })
 
+        //using aggregate pipeline
+        app.get('/bookingHistory/:email',  async (req, res) => {
+            const email = req.params.email;
+            try {
+                const result = await paymentCollection.aggregate([
+                    { $match: { email } },
+                    { $unwind: '$itemsName' },
+                    {
+                        $lookup: {
+                            from: 'menu',
+                            localField: 'itemsName',
+                            foreignField: 'name',
+                            as: 'detailedMenuItems'
+                        }
+                    },
+                    {
+                        $unwind: '$detailedMenuItems'
+                    },
+                ]).toArray();
+
+                res.send(result);
+            } catch (error) {
+                console.error(error);
+                res.status(500).send({ error: true, message: 'Internal Server Error' });
+            }
+        });
+
         app.post('/order', async (req, res) => {
             const item = req.body;
             const result = await orderCollection.insertOne(item);
@@ -212,11 +277,11 @@ async function run() {
 
         app.get('/payment/:email', verifyJWT, async (req, res) => {
             const email = req.params.email;
-            if(req.decoded.email != email){
-                return res.status(403).send({message: 'forbidden access'});
+            if (req.decoded.email != email) {
+                return res.status(403).send({ message: 'forbidden access' });
             }
 
-            const query = {email: email}
+            const query = { email: email }
             const result = await paymentCollection.find(query).toArray();
             res.send(result);
         })
